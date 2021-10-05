@@ -1,37 +1,94 @@
 // src/mocks/handlers.js
-import { rest } from 'msw'
+import { rest } from "msw";
+import { v4 as uuidv4 } from "uuid";
+
+const baseAPIRoute = `/api`;
+const API_Version = `/v1`;
+const APIStemURL = `${baseAPIRoute}${API_Version}`;
+const endpointFragment = "/cars";
+export const fullCarsURL = `${APIStemURL}${endpointFragment}`;
+
+const CARS_STORAGE_KEY = "cars";
+
+export const dummyCar = { _id: uuidv4(), name: "test", bhp: 123 };
+
+sessionStorage.setItem(CARS_STORAGE_KEY, JSON.stringify([dummyCar]));
+
+const getCars = () => JSON.parse(sessionStorage.getItem(CARS_STORAGE_KEY));
+const setCars = (cars) => sessionStorage.setItem(CARS_STORAGE_KEY, cars);
 
 export const handlers = [
-  rest.post('/login', (req, res, ctx) => {
-    // Persist user's authentication in the session
-    sessionStorage.setItem('is-authenticated', 'true')
-
-    return res(
-      // Respond with a 200 status code
-      ctx.status(200),
-    )
+  rest.post(fullCarsURL, (req, res, ctx) => {
+    const cars = getCars();
+    console.log("body", req.body);
+    const newCar = {
+      _id: uuidv4(),
+      ...req.body,
+    };
+    cars.push(newCar);
+    setCars(cars);
+    return res(ctx.status(201), ctx.json(newCar));
   }),
 
-  rest.get('/user', (req, res, ctx) => {
-    // Check if the user is authenticated in this session
-    const isAuthenticated = sessionStorage.getItem('is-authenticated')
+  rest.get(fullCarsURL, (req, res, ctx) => {
+    const cars = getCars();
 
-    if (!isAuthenticated) {
-      // If not authenticated, respond with a 403 error
-      return res(
-        ctx.status(403),
-        ctx.json({
-          errorMessage: 'Not authorized',
-        }),
-      )
-    }
-
-    // If authenticated, return a mocked user details
     return res(
       ctx.status(200),
       ctx.json({
-        username: 'admin',
-      }),
-    )
+        cars,
+      })
+    );
   }),
-]
+
+  rest.get(`${fullCarsURL}/:id`, (req, res, ctx) => {
+    const cars = getCars();
+    const { id } = req.params;
+    const car = cars.find((car) => car._id === id);
+
+    if (!car) {
+      return res(ctx.status(404));
+    }
+    return res(ctx.status(200), ctx.json(car));
+  }),
+
+  rest.put(`${fullCarsURL}/:id`, (req, res, ctx) => {
+    const cars = getCars();
+    const { id } = req.params;
+    const idx = cars.findIndex((car) => car._id === id);
+
+    if (idx === -1) {
+      return res(ctx.status(404));
+    }
+
+    const { body: changes } = req;
+
+    const newCar = {
+      ...cars[idx],
+      ...changes,
+    };
+
+    cars[idx] = newCar;
+
+    setCars(cars);
+
+    return res(ctx.status(200));
+  }),
+
+  rest.delete(`${fullCarsURL}/:id`, (req, res, ctx) => {
+    const cars = getCars();
+    const { id } = req.params;
+    console.log("delete call received for", id);
+    const idx = cars.findIndex((car) => car._id === id);
+
+    if (idx === -1) {
+      console.log("not found");
+      return res(ctx.status(404));
+    }
+
+    cars.splice(idx, 1);
+    setCars(cars);
+    console.log("successfull delete", cars);
+    return res(ctx.status(204));
+  }),
+];
